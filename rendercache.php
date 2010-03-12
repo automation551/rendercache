@@ -54,7 +54,7 @@ class RenderCache
 		if ( file_exists( $group_file ) ) {
 			self::$group_list = unserialize( file_get_contents ( $group_file ) );
 		}
-		else {	//TODO: How to handle this?
+		else {
 			self::$group_list = array();
 		}
 	}
@@ -85,7 +85,7 @@ class RenderCache
 			
 		list( $group, $name ) = self::extract_group_and_name( $name );
 		
-		//action_rendercache_set_before can return false to cancel setting this item in cache
+		//Plugin hook
 		if ( Plugins::act( 'rendercache_put_before', $name, $file, $expiry, $keep, $group ) === false ) {
 			return;
 		}
@@ -109,6 +109,7 @@ class RenderCache
 		//Update the group data file
 		self::put_group_data_to_file( $group );
 
+		//Plugin hook
 		Plugins::act( 'rendercache_put_after', $name, $file, $expiry, $keep, $group );
 	}
 	/* The following function is private and works the data array only without	*/
@@ -143,13 +144,15 @@ class RenderCache
 		list( $group, $name ) = self::extract_group_and_name( $name );
 
 		$ghash = self::get_group_hash( $group );
+		$hash = self::get_name_hash( $name );
+		
 		//If the group is not in the array
 		if ( !isset( self::$cache_data[$ghash] ) ) {
 			//Get the group data from the data file
 			self::get_group_data_from_file( $group );
 		}
 
-		return self::$cache_url . self::get_filename( $name, $group );
+		return self::$cache_url . self::$cache_data[$ghash][$hash]['filename'];
 	}
 	
 	
@@ -168,13 +171,15 @@ class RenderCache
 		list( $group, $name ) = self::extract_group_and_name( $name );
 
 		$ghash = self::get_group_hash( $group );
+		$hash = self::get_name_hash( $name );
+		
 		//If the group is not in the array
 		if ( !isset( self::$cache_data[$ghash] ) ) {
 			//Get the group data from the data file
 			self::get_group_data_from_file( $group );
 		}
 
-		return self::$cache_path . self::get_filename( $name, $group );
+		return self::$cache_path . self::$cache_data[$ghash][$hash]['filename'];
 	}
 	
 	
@@ -309,6 +314,11 @@ class RenderCache
 		
 		list( $group, $name ) = self::extract_group_and_name( $name );
 		
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_extend_before', $name, $expiry ) === false ) {
+			return;
+		}
+		
 		$ghash = self::get_group_hash( $group );
 		//If the group is not in the array
 		if ( !isset( self::$cache_data[$ghash] ) ) {
@@ -319,9 +329,16 @@ class RenderCache
 		$ghash = self::get_group_hash( $group );
 		$hash = self::get_name_hash( $name );
 		
+		//If the item is in the array, extend its expiration
 		if ( isset( self::$cache_data[$ghash][$hash] ) ) {
 			self::$cache_data[$ghash][$hash]['expiry'] += $expiry;
 		}
+		
+		//Update the group data file
+		self::put_group_data_to_file( $group );
+		
+		//Plugin hook
+		Plugins::act( 'rendercache_extend_after', $name, $expiry );
 	}
 	
 
@@ -379,30 +396,32 @@ class RenderCache
 				break;
 		}
 		
+		//Loop through all matching item names
 		foreach ( $names as $hash => $name ) {
-			//action_rendercache_expire can return false to cancel expiring an item
-			if ( Plugins::act( 'rendercache_expire', $name, $group ) === false ) {
-				return;
-			}
-				
-			if ( isset( self::$cache_data[$ghash][$hash] ) ) {
-				if ( file_exists( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] ) ) {
-					//Delete the cached file
-					unlink( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] );
-				}
-				//Remove the item from the data array
-				self::_expire( $name, $group );
-			}
+			//Remove the item from the data array
+			self::_expire( $name, $group );
 		}
 		
+		//Update the group data file
 		self::put_group_data_to_file( $group );
 	}
 	/* The following function is private and works the data array only without	*/
 	/* pulling any data from file												*/
 	private static function _expire( $name, $group )
 	{
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_expire_before', $name, $group ) === false ) {
+			return;
+		}
+
 		$ghash = self::get_group_hash( $group );
 		$hash = self::get_name_hash( $name );
+	
+		//If the cached file exists
+		if ( file_exists( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] ) ) {
+			//Delete the cached file
+			unlink( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] );
+		}
 				
 		//Remove the record from array
 		unset ( self::$cache_data[$ghash][$hash] );
@@ -412,6 +431,9 @@ class RenderCache
 			unset( self::$cache_data[$ghash] );
 			unset( self::$group_list[$ghash] );
 		}
+		
+		//Plugin hook
+		Plugins::act( 'rendercache_expire_after', $name, $group );
 	}
 	
 	
@@ -450,12 +472,12 @@ class RenderCache
 		if ( !isset( self::$cache_data[$ghash][$hash] ) ) {
 			return true;
 		}
-		//If the cache item is expired, return true
-		else if ( self::$cache_data[$ghash][$hash]['expires'] < time() ) {
+		//If the cache item is expired, return true (even if "keep" is set)
+		else if ( self::$cache_data[$ghash][$hash]['expiry'] < time() ) {
 			return true;
 		}
 		//If the cached file does not exist, declare the item expired
-		else if ( !file_exists( self::$cache_data[$ghash][$hash]['filename'] ) ) {
+		else if ( !file_exists( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] ) ) {
 			return true;
 		}
 		
@@ -469,6 +491,11 @@ class RenderCache
 	public static function purge()
 	{
 		if ( !self::$enabled ) {
+			return;
+		}
+		
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_purge_before' ) === false ) {
 			return;
 		}
 		
@@ -494,6 +521,56 @@ class RenderCache
 			self::set_group_data_to_file( $group );
 		
 		}
+		
+		//Plugin hook
+		Plugins::act( 'rendercache_purge_after' );
+	}
+	
+	
+	/*
+	 * Clears the expired items in a given group (reads/writes data file)
+	 *
+	 * @param string $group The group whose expired items to clear
+	 */
+	public static function clear_expired( $group )
+	{
+		if ( !self::$enabled ) {
+			return;
+		}
+		
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_clear_expired_before', $group ) === false ) {
+			return;
+		}
+		
+		$ghash = self::get_group_hash( $group );
+		//If the group is not in the array
+		if ( !isset( self::$cache_data[$ghash] ) ) {
+			//Get the group data from the data file
+			self::get_group_data_from_file( $group );
+		}
+		
+		//Clear the expired items in the group
+		self::_clear_expired( $group );
+		
+		//Plugin hook
+		Plugins::act( 'rendercache_clear_expired_after', $group );
+	}
+	/* The following function is private and works the data array only without	*/
+	/* pulling any data from file												*/
+	private static function _clear_expired( $group )
+	{
+		$ghash = self::get_group_hash( $group );
+		
+		//Loop through all cached items for this group
+		foreach( self::$cache_data[$ghash] as $hash => $record ) {
+			$name = self::$cache_data[$ghash][$hash]['name'];
+			//If the item is expired
+			if ( !self::_has( $name, $group ) ) {
+				//Remove the item
+				self::_expire( $name, $group );
+			}
+		}
 	}
 	
 	
@@ -514,8 +591,11 @@ class RenderCache
 
 		//If the data file exists
 		if ( file_exists( $data_file ) ) {
-			//Put the data in the array
+			//Get the data from file and put it in the array
 			self::$cache_data[$ghash] = unserialize( file_get_contents( $data_file ) );
+			//Clear expired cache items for this group
+			//NOTE: This is the only place where we clear expired items and should only run once per group loaded from file
+			self::_clear_expired( $group );
 		}
 		//Otherwise
 		else {
@@ -542,8 +622,9 @@ class RenderCache
 		}
 		//Otherwise
 		else {
-			//Delete the data file
+			//If the group data file exists
 			if ( file_exists( $data_file ) ) {
+				//Delete the group data file
 				unlink( $data_file );
 			}
 		}
@@ -617,22 +698,6 @@ class RenderCache
 		
 		return $name;
 	}
-	
-
-	/*
-	 * Return the filename for the cached file
-	 *
-	 * @param string $name The name of the cache item
-	 * @param string $group The group of the cache item
-	 * @return string The filename for the cached file
-	 */
-	private static function get_filename( $name, $group )
-	{
-		$ghash = self::get_group_hash( $group );
-		$hash = self::get_name_hash( $name );
-	
-		return self::$cache_data[$ghash][$hash]['filename'];
-	}	
 	
 	
 	/*
