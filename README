@@ -1,0 +1,8 @@
+RenderCache
+A class for Habari (http://www.habariproject.org) which caches rendered documents such as images and PDFs.
+
+Requirements:
+	@ CURRENTLY: You will need patch 1158.2 from Ticket #1158 applied to system/classes/plugins.php. (https://trac.habariproject.org/habari/attachment/ticket/1158/1158.2.diff)  This is only relevant until (if) this patch is commited.
+	
+To install:
+	(1) Drop rendercache.php into user/classes.
