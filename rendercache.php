@@ -278,8 +278,8 @@ class RenderCache
 	/**
 	 * Returns the group from the cache.
 	 *
-	 * @param string $name The name of the cached item
-	 * @return mixed An array of files belonging to the group.
+	 * @param string $group The cache group
+	 * @return mixed An array of records belonging to the group.
 	 */
 	public static function get_group( $group )
 	{
