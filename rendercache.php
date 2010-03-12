@@ -85,6 +85,23 @@ class RenderCache
 			
 		list( $group, $name ) = self::extract_group_and_name( $name );
 		
+		$ghash = self::get_group_hash( $group );
+		//If the group is not in the array
+		if ( !isset( self::$cache_data[$ghash] ) ) {
+			//Get the group data from the data file
+			self::get_group_data_from_file( $group );
+		}
+		
+		//Call the private function to do the work.
+		self::_put( $name, $file, $expiry = 86400, $keep = false, $group );
+
+		//Update the group data file
+		self::put_group_data_to_file( $group );
+	}
+	/* The following function is private and works the data array only without	*/
+	/* pulling any data from file												*/
+	private static function _put( $name, $file, $expiry = 86400, $keep = false, $group )
+	{
 		//Plugin hook
 		if ( Plugins::act( 'rendercache_put_before', $name, $file, $expiry, $keep, $group ) === false ) {
 			return;
@@ -97,26 +114,6 @@ class RenderCache
 		copy( $file, self::$cache_path . $filename );
 		
 		$ghash = self::get_group_hash( $group );
-		//If the group is not in the array
-		if ( !isset( self::$cache_data[$ghash] ) ) {
-			//Get the group data from the data file
-			self::get_group_data_from_file( $group );
-		}
-		
-		//Add the item to the array and add the group to the group list
-		self::_put( $name, $filename, $expiry = 86400, $keep = false, $group );
-
-		//Update the group data file
-		self::put_group_data_to_file( $group );
-
-		//Plugin hook
-		Plugins::act( 'rendercache_put_after', $name, $file, $expiry, $keep, $group );
-	}
-	/* The following function is private and works the data array only without	*/
-	/* pulling any data from file												*/
-	private static function _put( $name, $filename, $expiry = 86400, $keep = false, $group )
-	{
-		$ghash = self::get_group_hash( $group );
 		$hash = self::get_name_hash( $name );
 		
 		//Add the item to the array
@@ -126,6 +123,9 @@ class RenderCache
 		if( !isset ( self::$group_list[$ghash] ) ) {
 			self::$group_list[$ghash] = $group;
 		}
+
+		//Plugin hook
+		Plugins::act( 'rendercache_put_after', $name, $file, $expiry, $keep, $group );
 	}
 
 
@@ -312,18 +312,28 @@ class RenderCache
 			return;
 		}
 		
-		list( $group, $name ) = self::extract_group_and_name( $name );
-		
-		//Plugin hook
-		if ( Plugins::act( 'rendercache_extend_before', $name, $expiry ) === false ) {
-			return;
-		}
+		list( $group, $name ) = self::extract_group_and_name( $name );		
 		
 		$ghash = self::get_group_hash( $group );
 		//If the group is not in the array
 		if ( !isset( self::$cache_data[$ghash] ) ) {
 			//Get the group data from the data file
 			self::get_group_data_from_file( $group );
+		}
+		
+		//Call the private function to do the work
+		self::_extend( $name, $expiry, $group );
+		
+		//Update the group data file
+		self::put_group_data_to_file( $group );
+	}
+	/* The following function is private and works the data array only without	*/
+	/* pulling any data from file												*/
+	private static function _extend( $name, $expiry, $group )
+	{
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_extend_before', $name, $expiry ) === false ) {
+			return;
 		}
 		
 		$ghash = self::get_group_hash( $group );
@@ -333,9 +343,6 @@ class RenderCache
 		if ( isset( self::$cache_data[$ghash][$hash] ) ) {
 			self::$cache_data[$ghash][$hash]['expiry'] += $expiry;
 		}
-		
-		//Update the group data file
-		self::put_group_data_to_file( $group );
 		
 		//Plugin hook
 		Plugins::act( 'rendercache_extend_after', $name, $expiry );
@@ -513,9 +520,7 @@ class RenderCache
 				//Expire each item
 				self::_expire( $name, $group );
 			}
-		
-			//Remove the group from the array
-			unset ( self::$cache_data[$ghash] );
+			//The group should be deleted by _expire when all items are removed
 		
 			//Update the data files
 			self::set_group_data_to_file( $group );
