@@ -93,7 +93,7 @@ class RenderCache
 		}
 		
 		//Call the private function to do the work.
-		self::_put( $name, $file, $expiry = 86400, $keep = false, $group );
+		self::_put( $name, $file, $expiry, $keep, $group );
 
 		//Update the group data file
 		self::put_group_data_to_file( $group );
@@ -117,7 +117,7 @@ class RenderCache
 		$hash = self::get_name_hash( $name );
 		
 		//Add the item to the array
-		self::$cache_data[$ghash][$hash] = array( 'filename' => $filename, 'expires' => time() + $expiry, 'keep' => $keep, 'name' => $name );
+		self::$cache_data[$ghash][$hash] = array( 'filename' => $filename, 'expiry' => time() + $expiry, 'keep' => $keep, 'name' => $name );
 		
 		//Update the group list
 		if( !isset ( self::$group_list[$ghash] ) ) {
@@ -218,7 +218,7 @@ class RenderCache
 			return false;
 		}
 		//If the item is expired, return false
-		else if ( self::$cache_data[$ghash][$hash]['expires'] < time() && !self::$cache_data[$ghash][$hash]['keep'] ) {
+		else if ( self::$cache_data[$ghash][$hash]['expiry'] < time() && !self::$cache_data[$ghash][$hash]['keep'] ) {
 			return false;
 		}
 		//If the cached file does not exist, return false
@@ -416,14 +416,20 @@ class RenderCache
 	/* pulling any data from file												*/
 	private static function _expire( $name, $group )
 	{
+	
+		$ghash = self::get_group_hash( $group );
+		$hash = self::get_name_hash( $name );
+		
+		//Make sure the item to expire is actually in the array
+		if ( !isset( self::$cache_data[$ghash][$hash] ) ) {
+			return;
+		}
+	
 		//Plugin hook
 		if ( Plugins::act( 'rendercache_expire_before', $name, $group ) === false ) {
 			return;
 		}
 
-		$ghash = self::get_group_hash( $group );
-		$hash = self::get_name_hash( $name );
-	
 		//If the cached file exists
 		if ( file_exists( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] ) ) {
 			//Delete the cached file
@@ -543,11 +549,6 @@ class RenderCache
 			return;
 		}
 		
-		//Plugin hook
-		if ( Plugins::act( 'rendercache_clear_expired_before', $group ) === false ) {
-			return;
-		}
-		
 		$ghash = self::get_group_hash( $group );
 		//If the group is not in the array
 		if ( !isset( self::$cache_data[$ghash] ) ) {
@@ -558,24 +559,30 @@ class RenderCache
 		//Clear the expired items in the group
 		self::_clear_expired( $group );
 		
-		//Plugin hook
-		Plugins::act( 'rendercache_clear_expired_after', $group );
 	}
 	/* The following function is private and works the data array only without	*/
 	/* pulling any data from file												*/
 	private static function _clear_expired( $group )
 	{
+		//Plugin hook
+		if ( Plugins::act( 'rendercache_clear_expired_before', $group ) === false ) {
+			return;
+		}
+		
 		$ghash = self::get_group_hash( $group );
 		
 		//Loop through all cached items for this group
 		foreach( self::$cache_data[$ghash] as $hash => $record ) {
-			$name = self::$cache_data[$ghash][$hash]['name'];
-			//If the item is expired
-			if ( !self::_has( $name, $group ) ) {
+			$name = $record['name'];
+			//If the item is expired and not set to "keep"
+			if ( !self::_has( $name, $group ) && !$record['keep'] ) {
 				//Remove the item
 				self::_expire( $name, $group );
 			}
 		}
+
+		//Plugin hook
+		Plugins::act( 'rendercache_clear_expired_after', $group );
 	}
 	
 	
