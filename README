@@ -2,4 +2,4 @@ RenderCache
 A class for Habari (http://www.habariproject.org) which caches rendered documents such as images and PDFs.
 	
 To install:
-	(1) Drop rendercache.php into user/classes.
+	(1) Drop rendercache.php into user/classes/.
