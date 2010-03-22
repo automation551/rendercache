@@ -103,9 +103,7 @@ class RenderCache
 	private static function _put( $name, $file, $expiry = 86400, $keep = false, $group )
 	{
 		//Plugin hook
-		if ( Plugins::act( 'rendercache_put_before', $name, $file, $expiry, $keep, $group ) === false ) {
-			return;
-		}
+		Plugins::act( 'rendercache_put_before', $name, $file, $expiry, $keep, $group );
 		
 		//Build the filename of the document
 		$filename = self::get_filename_hash( $name, $group ) . '.' . self::get_file_extension( $file );
@@ -332,9 +330,7 @@ class RenderCache
 	private static function _extend( $name, $expiry, $group )
 	{
 		//Plugin hook
-		if ( Plugins::act( 'rendercache_extend_before', $name, $expiry ) === false ) {
-			return;
-		}
+		Plugins::act( 'rendercache_extend_before', $name, $expiry );
 		
 		$ghash = self::get_group_hash( $group );
 		$hash = self::get_name_hash( $name );
@@ -426,9 +422,7 @@ class RenderCache
 		}
 	
 		//Plugin hook
-		if ( Plugins::act( 'rendercache_expire_before', $name, $group ) === false ) {
-			return;
-		}
+		Plugins::act( 'rendercache_expire_before', $name, $group );
 
 		//If the cached file exists
 		if ( file_exists( self::$cache_path . self::$cache_data[$ghash][$hash]['filename'] ) ) {
@@ -508,9 +502,7 @@ class RenderCache
 		}
 		
 		//Plugin hook
-		if ( Plugins::act( 'rendercache_purge_before' ) === false ) {
-			return;
-		}
+		Plugins::act( 'rendercache_purge_before' );
 		
 		//Loop through all groups
 		foreach( self::$group_list as $ghash => $group ) {
@@ -565,9 +557,7 @@ class RenderCache
 	private static function _clear_expired( $group )
 	{
 		//Plugin hook
-		if ( Plugins::act( 'rendercache_clear_expired_before', $group ) === false ) {
-			return;
-		}
+		Plugins::act( 'rendercache_clear_expired_before', $group );
 		
 		$ghash = self::get_group_hash( $group );
 		
